@@ -1,58 +1,62 @@
 # -*- coding: utf-8 -*-
 # author: jun ma
-from libsvm.python.svmutil import *
+
 import numpy as np
+from sklearn import preprocessing
+from sklearn.metrics import classification_report
+from sklearn.model_selection import GridSearchCV
+from sklearn.svm import SVC
 
-class SvmClassifier(object):
-    def __init__(self):
-        """
-        """
+print(__doc__)
 
-    def parse(self, X, Y):
-        """
-        parser array data into libsvm style
-        """
-        prob_y = []
-        prob_x = []
-        for i in range(len(X)):
-            xi = {}
-            for j in range(len(X[0])):
-                xi[int(j + 1)] = float(X[i][j])
-            prob_y += [float(Y[i])]
-            prob_x += [xi]
-        return (prob_x, prob_y)
+X = np.genfromtxt("data/X_train.txt", delimiter=' ')
+Y = np.genfromtxt("data/Y_train.txt", delimiter=' ')
 
-    def train(self, X, Y, options=None):
-        """
-        -s svm_type : set type of SVM (default 0)-----C-SVC
-        -t kernel_type : set type of kernel function (default 2)
-        -g  gamma : set gamma in kernel function (default 1/num_features)
-        -c penalty cost  default 1        """
-        m = svm_train(Y, X, options);
-        return m;
+Xtr = X[0:10000]
+Ytr = Y[0:10000]
+Xte = X[10000:20000]
+Yte = Y[10000:20000]
+# Set the parameters by cross-validation
 
-    def predict(self, Xte, Yte, m):
-        p_label, p_acc, p_val = svm_predict(Yte, Xte, m)
-        res = {}
-        res['acc'] = p_acc[0]
-        res["mse"] = p_acc[1]
-        res["predict_res"] = p_label
-        return res;
+cost = [2 ** (-5), 2 ** (-3), 2 ** (-1), 2 ** 1, 2 ** 3, 2 ** 5, 2 ** 7, 2 ** 9, 2 ** 11, 2 ** 13, 2 ** 15]
+g = [2 ** (-15), 2 ** (-13), 2 ** (-11), 2 ** (-9), 2 ** (-7), 2 ** (-5), 2 ** (-3), 2 ** (-1), 2 ** 1, 2 ** 3]
+tuned_parameters = [{'kernel': ['rbf'], 'gamma': g,
+                     'C': cost},
+                    {'kernel': ['linear'], 'C': cost}]
 
-svm = SvmClassifier()
-Y = [0, 1, 0, 1]
-X = [[1, 2, 3, 4], [2, 3, 4, 5], [1, 2, 4, 5], [1, 2, 6, 5]]
-prob_x, prob_y = svm.parse(X, Y)
-m = svm.train(prob_x, prob_y, '-g 0.01 -c 0.1')
-predict = svm.predict(prob_x, prob_y, m)
+scores = ['precision', 'recall']
 
-print predict
+for score in scores:
+    print("# Tuning hyper-parameters for %s" % score)
+    print()
 
+    clf = GridSearchCV(SVC(C=1, cache_size=300), tuned_parameters, cv=5,
+                       pre_dispatch='2*n_jobs',
+                       n_jobs=1,
+                       scoring='%s_macro' % score)
+    X = preprocessing.scale(Xtr)
 
+    clf.fit(X, Ytr)
 
-# print predict
-# y, x = svm_read_problem('data/iris.scale.txt')
-# m = svm_train(y[:140], x[:140], '-c 4')
-# print x[140:]
-# p_label, p_acc, p_val = svm_predict(y[140:], x[140:], m)
-# print p_acc
+    print("Best parameters set found on development set:")
+    print()
+    print(clf.best_params_)
+    print()
+    print("Grid scores on development set:")
+    print()
+    means = clf.cv_results_['mean_test_score']
+    stds = clf.cv_results_['std_test_score']
+    for mean, std, params in zip(means, stds, clf.cv_results_['params']):
+        print("%0.3f (+/-%0.03f) for %r"
+              % (mean, std * 2, params))
+    print()
+
+    print("Detailed classification report:")
+    print()
+    print("The model is trained on the full development set.")
+    print("The scores are computed on the full evaluation set.")
+    print()
+    Xt = preprocessing.scale(Xte)
+    y_true, y_pred = Yte, clf.predict(Xt)
+    print(classification_report(y_true, y_pred))
+    print()
